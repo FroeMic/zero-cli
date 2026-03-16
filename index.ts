@@ -5,7 +5,22 @@ import fs from "node:fs";
 import os from "node:os";
 
 // We'll call the raw binary we compiled from the spec
-const RAW_CLI = path.join(import.meta.dirname, "zero-cli-raw");
+const getRawCliPath = () => {
+  const exeDir = path.dirname(process.execPath);
+  const paths = [
+    path.join(exeDir, "zero-cli-raw"),
+    path.join(import.meta.dirname, "zero-cli-raw"),
+    path.join(import.meta.dirname, "bin", "zero-cli-raw"),
+    path.join(process.cwd(), "bin", "zero-cli-raw"),
+    path.join(process.cwd(), "zero-cli-raw")
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return paths[0]; // Default
+};
+
+const RAW_CLI = getRawCliPath();
 const CACHE_FILE = path.join(os.homedir(), ".zero-cli-cache.json");
 
 function loadCache(): Record<string, string> {
@@ -24,13 +39,19 @@ function saveCache(cache: Record<string, string>) {
 }
 
 function syncColumns() {
+  if (!fs.existsSync(RAW_CLI)) {
+    console.error(`Error: Raw CLI binary not found. Looked in several places including ${RAW_CLI}`);
+    return;
+  }
+  
   console.log("Syncing column definitions...");
   // Call raw CLI to get columns
   const result = spawnSync(RAW_CLI, ["columns", "list", "--json"]);
   
   if (result.status === 0) {
     try {
-      const output = JSON.parse(result.stdout.toString());
+      const stdoutStr = result.stdout.toString();
+      const output = JSON.parse(stdoutStr);
       const data = output.data || output;
       if (Array.isArray(data)) {
         const cache: Record<string, string> = {};
@@ -43,7 +64,23 @@ function syncColumns() {
         console.log(`Successfully synced ${Object.keys(cache).length} columns.`);
         return;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Debug: Failed to parse JSON output from columns list");
+      console.error("Raw stdout:", result.stdout?.toString());
+    }
+  } else {
+    console.error("Debug: RAW_CLI failed");
+    console.error("Status:", result.status);
+    console.error("Signal:", result.signal);
+    if (result.error) {
+      console.error("Error object:", result.error);
+    }
+    if (result.stderr) {
+      process.stderr.write(result.stderr.toString());
+    }
+    if (result.stdout && result.stdout.length > 0) {
+       console.log("Raw stdout:", result.stdout.toString());
+    }
   }
   console.error("Failed to sync columns. Make sure you are logged in using 'zero-cli login <token>'.");
 }
@@ -85,6 +122,10 @@ async function main() {
   // Commands that should be passed through directly without Commander parsing
   const rawCommands = ["login", "logout", "whoami", "__schema", "help"];
   if (rawCommands.includes(firstArg) || args.length === 0) {
+    if (!fs.existsSync(RAW_CLI)) {
+       console.error(`Error: Raw CLI binary not found at ${RAW_CLI}`);
+       process.exit(1);
+    }
     const result = spawnSync(RAW_CLI, args, { stdio: "inherit" });
     process.exit(result.status ?? 0);
   }
@@ -99,15 +140,18 @@ async function main() {
   
   program
     .name("zero-cli")
-    .version("1.1.1")
+    .version("1.1.2")
     .description("Zero CRM CLI with enriched output")
     .option("--hide-nulls", "Hide null values from output")
     .option("--sync", "Sync column definitions before running")
     .allowUnknownOption();
 
   program.action((options, command) => {
-    const commandArgs = command.args;
-    
+    if (!fs.existsSync(RAW_CLI)) {
+       console.error(`Error: Raw CLI binary not found at ${RAW_CLI}`);
+       process.exit(1);
+    }
+
     if (options.sync) {
       syncColumns();
     }
@@ -132,7 +176,7 @@ async function main() {
     const result = spawnSync(RAW_CLI, execArgs);
     
     if (result.status !== 0) {
-      process.stderr.write(result.stderr);
+      if (result.stderr) process.stderr.write(result.stderr);
       process.exit(result.status || 1);
     }
 
