@@ -45,7 +45,7 @@ function syncColumns() {
       }
     } catch (e) {}
   }
-  console.error("Failed to sync columns. Make sure you are logged in.");
+  console.error("Failed to sync columns. Make sure you are logged in using 'zero-cli login <token>'.");
 }
 
 function enrichObject(obj: any, cache: Record<string, string>, hideNulls: boolean) {
@@ -79,71 +79,72 @@ function enrichObject(obj: any, cache: Record<string, string>, hideNulls: boolea
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const firstArg = args[0];
+
+  // Commands that should be passed through directly without Commander parsing
+  const rawCommands = ["login", "logout", "whoami", "__schema", "help"];
+  if (rawCommands.includes(firstArg) || args.length === 0) {
+    const result = spawnSync(RAW_CLI, args, { stdio: "inherit" });
+    process.exit(result.status ?? 0);
+  }
+
+  // If it's the custom sync command
+  if (firstArg === "columns" && args[1] === "sync") {
+     syncColumns();
+     return;
+  }
+
   const program = new Command();
   
   program
     .name("zero-cli")
-    .version("1.1.0")
+    .version("1.1.1")
     .description("Zero CRM CLI with enriched output")
     .option("--hide-nulls", "Hide null values from output")
     .option("--sync", "Sync column definitions before running")
     .allowUnknownOption();
 
-  // Add explicit columns sync command
-  const columns = program.command("columns");
-  columns
-    .command("sync")
-    .description("Sync column definitions and cache them locally")
-    .action(() => {
-      syncColumns();
-    });
-
   program.action((options, command) => {
-    const args = command.args;
+    const commandArgs = command.args;
     
-    // Commands that should be passed through directly without enrichment
-    const passThroughCommands = ["login", "logout", "whoami", "__schema", "help"];
-    if (passThroughCommands.includes(args[0]) || args.length === 0) {
-      spawnSync(RAW_CLI, process.argv.slice(2), { stdio: "inherit" });
-      return;
-    }
-
     if (options.sync) {
       syncColumns();
     }
 
-    // Filter our custom flags
-    const rawArgs = process.argv.slice(2).filter(arg => 
+    // Filter our custom flags from the original process.argv
+    const filteredArgs = args.filter(arg => 
       arg !== '--hide-nulls' && arg !== '--sync'
     );
 
     // If it's a data command, we force --json to intercept
-    // We check if --curl is present, if so, we just pass through
-    if (rawArgs.includes("--curl") || rawArgs.includes("-h") || rawArgs.includes("--help")) {
-      spawnSync(RAW_CLI, rawArgs, { stdio: "inherit" });
+    if (filteredArgs.includes("--curl") || filteredArgs.includes("-h") || filteredArgs.includes("--help")) {
+      spawnSync(RAW_CLI, filteredArgs, { stdio: "inherit" });
       return;
     }
 
-    // Force --json for enrichment
-    if (!rawArgs.includes("--json")) {
-      rawArgs.push("--json");
+    // Force --json for enrichment unless already present
+    const execArgs = [...filteredArgs];
+    if (!execArgs.includes("--json")) {
+      execArgs.push("--json");
     }
 
-    const result = spawnSync(RAW_CLI, rawArgs);
+    const result = spawnSync(RAW_CLI, execArgs);
     
     if (result.status !== 0) {
       process.stderr.write(result.stderr);
       process.exit(result.status || 1);
     }
 
+    const stdoutStr = result.stdout.toString();
     try {
-      const output = JSON.parse(result.stdout.toString());
+      const output = JSON.parse(stdoutStr);
       const cache = loadCache();
       const enriched = enrichObject(output, cache, !!options.hideNulls);
       console.log(JSON.stringify(enriched, null, 2));
     } catch (e) {
       // If not JSON, just print raw stdout
-      process.stdout.write(result.stdout);
+      process.stdout.write(stdoutStr);
     }
   });
 
