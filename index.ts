@@ -1,4 +1,3 @@
-import { Command } from "commander";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
@@ -39,18 +38,17 @@ function saveCache(cache: Record<string, string>) {
 }
 
 function syncColumns() {
-  if (!fs.existsSync(RAW_CLI)) {
-    console.error(`Error: Raw CLI binary not found. Looked in several places including ${RAW_CLI}`);
-    return;
-  }
-  
   console.log("Syncing column definitions...");
-  // Call raw CLI to get columns
+  
+  // Attempt to get columns. We might need to pass through any workspaceId if the user has one.
+  // For now, let's just try the raw list.
   const result = spawnSync(RAW_CLI, ["columns", "list", "--json"]);
   
+  const stdoutStr = result.stdout?.toString() || "";
+  const stderrStr = result.stderr?.toString() || "";
+
   if (result.status === 0) {
     try {
-      const stdoutStr = result.stdout.toString();
       const output = JSON.parse(stdoutStr);
       const data = output.data || output;
       if (Array.isArray(data)) {
@@ -63,26 +61,19 @@ function syncColumns() {
         saveCache(cache);
         console.log(`Successfully synced ${Object.keys(cache).length} columns.`);
         return;
+      } else {
+        console.error("Debug: Received JSON but 'data' is not an array.");
+        console.error("Output summary:", stdoutStr.slice(0, 200));
       }
     } catch (e) {
       console.error("Debug: Failed to parse JSON output from columns list");
-      console.error("Raw stdout:", result.stdout?.toString());
+      console.error("Raw stdout (first 200 chars):", stdoutStr.slice(0, 200));
     }
   } else {
-    console.error("Debug: RAW_CLI failed");
-    console.error("Status:", result.status);
-    console.error("Signal:", result.signal);
-    if (result.error) {
-      console.error("Error object:", result.error);
-    }
-    if (result.stderr) {
-      process.stderr.write(result.stderr.toString());
-    }
-    if (result.stdout && result.stdout.length > 0) {
-       console.log("Raw stdout:", result.stdout.toString());
-    }
+    console.error(`Debug: RAW_CLI failed with status ${result.status}`);
+    if (stderrStr) console.error("Stderr:", stderrStr);
   }
-  console.error("Failed to sync columns. Make sure you are logged in using 'zero-cli login <token>'.");
+  console.error("Failed to sync columns. Make sure you are logged in and have access to the workspace.");
 }
 
 function enrichObject(obj: any, cache: Record<string, string>, hideNulls: boolean) {
@@ -116,58 +107,38 @@ function enrichObject(obj: any, cache: Record<string, string>, hideNulls: boolea
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  const firstArg = args[0];
+  const allArgs = process.argv.slice(2);
+  
+  // Manual flag parsing to avoid Commander's strict positional checking
+  const hideNulls = allArgs.includes("--hide-nulls");
+  const sync = allArgs.includes("--sync");
+  const isHelp = allArgs.includes("--help") || allArgs.includes("-h") || allArgs.length === 0;
+  
+  // Filter out our custom flags
+  const filteredArgs = allArgs.filter(arg => arg !== '--hide-nulls' && arg !== '--sync');
+  const firstArg = filteredArgs[0];
 
-  // Commands that should be passed through directly without Commander parsing
-  const rawCommands = ["login", "logout", "whoami", "__schema", "help"];
-  if (rawCommands.includes(firstArg) || args.length === 0) {
-    if (!fs.existsSync(RAW_CLI)) {
-       console.error(`Error: Raw CLI binary not found at ${RAW_CLI}`);
-       process.exit(1);
-    }
-    const result = spawnSync(RAW_CLI, args, { stdio: "inherit" });
+  if (isHelp || ["login", "logout", "whoami", "__schema"].includes(firstArg)) {
+    const result = spawnSync(RAW_CLI, filteredArgs, { stdio: "inherit" });
     process.exit(result.status ?? 0);
   }
 
-  // If it's the custom sync command
-  if (firstArg === "columns" && args[1] === "sync") {
-     syncColumns();
-     return;
+  if (firstArg === "columns" && filteredArgs[1] === "sync") {
+    syncColumns();
+    return;
   }
 
-  const program = new Command();
-  
-  program
-    .name("zero-cli")
-    .version("1.1.2")
-    .description("Zero CRM CLI with enriched output")
-    .option("--hide-nulls", "Hide null values from output")
-    .option("--sync", "Sync column definitions before running")
-    .allowUnknownOption();
+  if (sync) {
+    syncColumns();
+  }
 
-  program.action((options, command) => {
-    if (!fs.existsSync(RAW_CLI)) {
-       console.error(`Error: Raw CLI binary not found at ${RAW_CLI}`);
-       process.exit(1);
-    }
+  // Determine if we should attempt enrichment (only for list/get/create/update)
+  const dataActions = ["list", "get", "create", "update"];
+  const isDataCommand = filteredArgs.length >= 2 && dataActions.includes(filteredArgs[1]);
+  const isCurl = filteredArgs.includes("--curl");
 
-    if (options.sync) {
-      syncColumns();
-    }
-
-    // Filter our custom flags from the original process.argv
-    const filteredArgs = args.filter(arg => 
-      arg !== '--hide-nulls' && arg !== '--sync'
-    );
-
-    // If it's a data command, we force --json to intercept
-    if (filteredArgs.includes("--curl") || filteredArgs.includes("-h") || filteredArgs.includes("--help")) {
-      spawnSync(RAW_CLI, filteredArgs, { stdio: "inherit" });
-      return;
-    }
-
-    // Force --json for enrichment unless already present
+  if (isDataCommand && !isCurl) {
+    // Force --json for enrichment
     const execArgs = [...filteredArgs];
     if (!execArgs.includes("--json")) {
       execArgs.push("--json");
@@ -184,15 +155,19 @@ async function main() {
     try {
       const output = JSON.parse(stdoutStr);
       const cache = loadCache();
-      const enriched = enrichObject(output, cache, !!options.hideNulls);
-      console.log(JSON.stringify(enriched, null, 2));
+      const enriched = enrichObject(output, cache, hideNulls);
+      process.stdout.write(JSON.stringify(enriched, null, 2) + "\n");
     } catch (e) {
-      // If not JSON, just print raw stdout
       process.stdout.write(stdoutStr);
     }
-  });
-
-  program.parse(process.argv);
+  } else {
+    // Pass through everything else directly
+    const result = spawnSync(RAW_CLI, filteredArgs, { stdio: "inherit" });
+    process.exit(result.status ?? 0);
+  }
 }
 
-main();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
