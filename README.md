@@ -50,19 +50,41 @@ List contacts with specific fields and related company info:
 ./bin/zero-cli contacts list-contacts --fields "id,name,email,company.name"
 ```
 
+#### **Custom Properties & Enrichment**
+By default, the API returns custom property IDs as UUIDs. This CLI can resolve these into human-readable names.
+
+1. **Sync Column Definitions:**
+   Cache the mapping of UUIDs to names locally:
+   ```bash
+   ./bin/zero-cli columns sync
+   ```
+
+2. **View Enriched Output:**
+   UUIDs in the `custom` object will now show their display names:
+   ```bash
+   ./bin/zero-cli contacts list --where '{"name": "Michael"}'
+   ```
+
+3. **Clean Up Output:**
+   Use the `--hide-nulls` flag to remove empty fields and focus on relevant data:
+   ```bash
+   ./bin/zero-cli contacts list --where '{"name": "Michael"}' --hide-nulls
+   ```
+
 #### **Custom Properties**
-Discover custom field UUIDs:
+Discover custom field UUIDs (raw):
 ```bash
-./bin/zero-cli columns list-columns
+./bin/zero-cli columns list
 ```
 
 Update a custom property using dot-notation:
 ```bash
-./bin/zero-cli companies update-company <COMPANY_ID> --custom.UUID "New Value"
+./bin/zero-cli companies update <COMPANY_ID> --custom.UUID "New Value"
 ```
 
 #### **Advanced Features**
-- **JSON Output:** Append `--json` to any command for machine-readable output.
+- **JSON Output:** The CLI always outputs JSON for data-returning commands to support enrichment.
+- **Sync On-The-Fly:** Add `--sync` to any command to refresh column definitions before executing.
 - **Dry Run:** Use `--dry-run` to see the request without executing it.
 - **cURL Command:** Use `--curl` to generate an equivalent `curl` command.
 

@@ -5,6 +5,7 @@
     "": {
       "name": "zero-cli",
       "dependencies": {
+        "commander": "^14.0.3",
         "specli": "^0.0.39",
       },
       "devDependencies": {

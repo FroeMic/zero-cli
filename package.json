@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "specli compile spec/zero-api.yaml --name zero-cli --outfile ./bin/zero-cli"
+    "build:raw": "specli compile spec/zero-api.yaml --name zero-cli-raw --outfile ./bin/zero-cli-raw",
+    "build:wrapper": "bun build ./index.ts --compile --outfile ./bin/zero-cli",
+    "build": "bun run build:raw && bun run build:wrapper"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -13,6 +15,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "commander": "^14.0.3",
     "specli": "^0.0.39"
   }
 }
