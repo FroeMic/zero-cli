@@ -40,8 +40,6 @@ function saveCache(cache: Record<string, string>) {
 function syncColumns() {
   console.log("Syncing column definitions...");
   
-  // Attempt to get columns. We might need to pass through any workspaceId if the user has one.
-  // For now, let's just try the raw list.
   const result = spawnSync(RAW_CLI, ["columns", "list", "--json"]);
   
   const stdoutStr = result.stdout?.toString() || "";
@@ -50,7 +48,15 @@ function syncColumns() {
   if (result.status === 0) {
     try {
       const output = JSON.parse(stdoutStr);
-      const data = output.data || output;
+      
+      // Specli wrapper check: if it has an 'ok' field and a 'body'
+      let data = output;
+      if (output && typeof output === 'object' && 'body' in output) {
+        data = output.body.data || output.body;
+      } else {
+        data = output.data || output;
+      }
+
       if (Array.isArray(data)) {
         const cache: Record<string, string> = {};
         data.forEach((col: any) => {
@@ -62,7 +68,7 @@ function syncColumns() {
         console.log(`Successfully synced ${Object.keys(cache).length} columns.`);
         return;
       } else {
-        console.error("Debug: Received JSON but 'data' is not an array.");
+        console.error("Debug: Received JSON but could not find a data array.");
         console.error("Output summary:", stdoutStr.slice(0, 200));
       }
     } catch (e) {
