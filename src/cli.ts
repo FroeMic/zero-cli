@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { getRawCliPath, execRawJson } from "./raw";
 import { loadCache, saveCache, getWorkspace } from "./cache";
-import { extractDataArray, syncColumnsFromData, syncWorkspacesFromData, captureContext } from "./sync";
+import { extractDataArray, syncColumnsFromData, syncWorkspacesFromData, syncPipelinesFromData, syncUsersFromData, syncListsFromData, captureContext } from "./sync";
 import { enrichObject } from "./enrich";
 import { unwrapResponse, formatJson } from "./output";
 import type { GlobalCache } from "./types";
@@ -12,12 +12,21 @@ function runSync(): void {
   console.error("Syncing workspace configuration...");
   const cache = loadCache();
 
-  // 1. Fetch workspaces
-  const wsResult = execRawJson(RAW_CLI, ["workspaces", "list"]);
+  // 1. Fetch workspaces with expanded pipelines, stages, users, lists
+  const wsResult = execRawJson(RAW_CLI, [
+    "workspaces", "list",
+    "--fields", "*,pipelines,pipelines.pipelineStages,lists,memberships,memberships.user",
+  ]);
   if (wsResult.success) {
     const data = extractDataArray(wsResult.data);
-    const count = syncWorkspacesFromData(data, cache);
-    console.error(`  Workspaces: ${count}`);
+    const wsCount = syncWorkspacesFromData(data, cache);
+    console.error(`  Workspaces: ${wsCount}`);
+    const { pipelines, stages } = syncPipelinesFromData(data, cache);
+    console.error(`  Pipelines: ${pipelines}, Stages: ${stages}`);
+    const userCount = syncUsersFromData(data, cache);
+    console.error(`  Users: ${userCount}`);
+    const listCount = syncListsFromData(data, cache);
+    console.error(`  Lists: ${listCount}`);
   } else {
     console.error(`  Warning: failed to fetch workspaces: ${wsResult.error}`);
   }

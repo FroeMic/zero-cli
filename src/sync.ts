@@ -59,6 +59,72 @@ export function syncWorkspacesFromData(data: any[], cache: GlobalCache): number 
 }
 
 /**
+ * Sync pipelines and pipeline stages from expanded workspace data.
+ */
+export function syncPipelinesFromData(workspaces: any[], cache: GlobalCache): { pipelines: number; stages: number } {
+  let pipelines = 0, stages = 0;
+  for (const ws of workspaces) {
+    if (!ws.id) continue;
+    const cached = getWorkspace(cache, ws.id);
+    if (!Array.isArray(ws.pipelines)) continue;
+    for (const pipeline of ws.pipelines) {
+      if (pipeline.id && pipeline.name) {
+        cached.pipelines[pipeline.id] = pipeline.name;
+        pipelines++;
+      }
+      if (Array.isArray(pipeline.pipelineStages)) {
+        for (const stage of pipeline.pipelineStages) {
+          if (stage.id && stage.name) {
+            cached.stages[stage.id] = stage.name;
+            stages++;
+          }
+        }
+      }
+    }
+  }
+  return { pipelines, stages };
+}
+
+/**
+ * Sync users from expanded workspace memberships data.
+ */
+export function syncUsersFromData(workspaces: any[], cache: GlobalCache): number {
+  let count = 0;
+  for (const ws of workspaces) {
+    if (!ws.id) continue;
+    const cached = getWorkspace(cache, ws.id);
+    if (!Array.isArray(ws.memberships)) continue;
+    for (const membership of ws.memberships) {
+      const user = membership.user;
+      if (user && user.id && user.name) {
+        cached.users[user.id] = user.name;
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * Sync lists from expanded workspace data.
+ */
+export function syncListsFromData(workspaces: any[], cache: GlobalCache): number {
+  let count = 0;
+  for (const ws of workspaces) {
+    if (!ws.id) continue;
+    const cached = getWorkspace(cache, ws.id);
+    if (!Array.isArray(ws.lists)) continue;
+    for (const list of ws.lists) {
+      if (list.id && list.name) {
+        cached.lists[list.id] = list.name;
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+/**
  * Walk a response object tree and capture user/list/stage/pipeline context.
  */
 export function captureContext(obj: any, cache: GlobalCache, currentWsId?: string): void {

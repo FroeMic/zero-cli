@@ -4,6 +4,9 @@ import {
   extractDataArray,
   syncColumnsFromData,
   syncWorkspacesFromData,
+  syncPipelinesFromData,
+  syncUsersFromData,
+  syncListsFromData,
   captureContext,
 } from "../src/sync";
 
@@ -131,6 +134,165 @@ describe("syncWorkspacesFromData", () => {
   test("skips entries without id", () => {
     const cache = emptyGlobalCache();
     const count = syncWorkspacesFromData([{ name: "No ID" }], cache);
+    expect(count).toBe(0);
+  });
+});
+
+describe("syncPipelinesFromData", () => {
+  test("extracts pipelines and stages from expanded workspace data", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        name: "Workspace One",
+        pipelines: [
+          {
+            id: "pipe-1",
+            name: "Founder Pipeline",
+            pipelineStages: [
+              { id: "stage-1", name: "Lead" },
+              { id: "stage-2", name: "Meeting" },
+              { id: "stage-3", name: "Closed Won" },
+            ],
+          },
+          {
+            id: "pipe-2",
+            name: "Sales Pipeline",
+            pipelineStages: [
+              { id: "stage-4", name: "Prospecting" },
+            ],
+          },
+        ],
+      },
+    ];
+    const counts = syncPipelinesFromData(data, cache);
+    expect(counts).toEqual({ pipelines: 2, stages: 4 });
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("Founder Pipeline");
+    expect(cache.workspaces["ws-1"].pipelines["pipe-2"]).toBe("Sales Pipeline");
+    expect(cache.workspaces["ws-1"].stages["stage-1"]).toBe("Lead");
+    expect(cache.workspaces["ws-1"].stages["stage-3"]).toBe("Closed Won");
+  });
+
+  test("handles pipelines with no stages", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        pipelines: [{ id: "pipe-1", name: "Empty Pipeline" }],
+      },
+    ];
+    const counts = syncPipelinesFromData(data, cache);
+    expect(counts).toEqual({ pipelines: 1, stages: 0 });
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("Empty Pipeline");
+  });
+
+  test("skips workspaces without id or pipelines", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      { name: "No ID", pipelines: [{ id: "p-1", name: "P" }] },
+      { id: "ws-1" }, // no pipelines field
+    ];
+    const counts = syncPipelinesFromData(data, cache);
+    expect(counts).toEqual({ pipelines: 0, stages: 0 });
+  });
+
+  test("handles multiple workspaces", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        pipelines: [{ id: "pipe-1", name: "P1", pipelineStages: [{ id: "s-1", name: "S1" }] }],
+      },
+      {
+        id: "ws-2",
+        pipelines: [{ id: "pipe-2", name: "P2", pipelineStages: [{ id: "s-2", name: "S2" }] }],
+      },
+    ];
+    syncPipelinesFromData(data, cache);
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("P1");
+    expect(cache.workspaces["ws-2"].pipelines["pipe-2"]).toBe("P2");
+    expect(cache.workspaces["ws-1"].stages["s-2"]).toBeUndefined();
+  });
+});
+
+describe("syncUsersFromData", () => {
+  test("extracts users from memberships.user", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        memberships: [
+          { user: { id: "user-1", name: "Alice" } },
+          { user: { id: "user-2", name: "Bob" } },
+        ],
+      },
+    ];
+    const count = syncUsersFromData(data, cache);
+    expect(count).toBe(2);
+    expect(cache.workspaces["ws-1"].users["user-1"]).toBe("Alice");
+    expect(cache.workspaces["ws-1"].users["user-2"]).toBe("Bob");
+  });
+
+  test("skips memberships without user object", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        memberships: [
+          { role: "admin" }, // no user
+          { user: { id: "user-1", name: "Alice" } },
+          { user: { name: "No ID" } }, // no id
+        ],
+      },
+    ];
+    const count = syncUsersFromData(data, cache);
+    expect(count).toBe(1);
+  });
+
+  test("handles workspaces without memberships", () => {
+    const cache = emptyGlobalCache();
+    const count = syncUsersFromData([{ id: "ws-1" }], cache);
+    expect(count).toBe(0);
+  });
+});
+
+describe("syncListsFromData", () => {
+  test("extracts lists from workspace data", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        lists: [
+          { id: "list-1", name: "VIP" },
+          { id: "list-2", name: "Leads" },
+        ],
+      },
+    ];
+    const count = syncListsFromData(data, cache);
+    expect(count).toBe(2);
+    expect(cache.workspaces["ws-1"].lists["list-1"]).toBe("VIP");
+    expect(cache.workspaces["ws-1"].lists["list-2"]).toBe("Leads");
+  });
+
+  test("skips lists without id or name", () => {
+    const cache = emptyGlobalCache();
+    const data = [
+      {
+        id: "ws-1",
+        lists: [
+          { id: "list-1", name: "Valid" },
+          { name: "No ID" },
+          { id: "list-2" }, // no name
+        ],
+      },
+    ];
+    const count = syncListsFromData(data, cache);
+    expect(count).toBe(1);
+  });
+
+  test("handles workspaces without lists", () => {
+    const cache = emptyGlobalCache();
+    const count = syncListsFromData([{ id: "ws-1" }], cache);
     expect(count).toBe(0);
   });
 });
