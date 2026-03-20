@@ -45,7 +45,7 @@ function makeCache(): GlobalCache {
       "stage-2": "Closed Won",
     },
     pipelines: {
-      "pipe-1": "Sales Pipeline",
+      "pipe-1": { name: "Sales Pipeline", stages: {} },
     },
   };
   return cache;

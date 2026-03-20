@@ -69,7 +69,7 @@ function enrichStandardField(key: string, value: any, ws: WorkspaceCache): any {
   }
   // Deal pipeline UUID → pipeline name
   if (key === "pipelineId" && typeof value === "string") {
-    return ws.pipelines[value] ?? value;
+    return ws.pipelines[value]?.name ?? value;
   }
   return value;
 }

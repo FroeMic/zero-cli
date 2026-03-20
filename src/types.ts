@@ -10,13 +10,18 @@ export interface ColumnDef {
   options?: Record<string, string>; // option key UUID → display name
 }
 
+export interface PipelineDef {
+  name: string;
+  stages: Record<string, string>;           // stage UUID → display name
+}
+
 export interface WorkspaceCache {
   name?: string;
   columns: Record<string, ColumnDef>;       // column UUID → definition
   users: Record<string, string>;            // user UUID → display name
   lists: Record<string, string>;            // list UUID → display name
-  stages: Record<string, string>;           // stage UUID → display name
-  pipelines: Record<string, string>;        // pipeline UUID → display name
+  stages: Record<string, string>;           // stage UUID → display name (flat lookup)
+  pipelines: Record<string, PipelineDef>;   // pipeline UUID → definition with stages
 }
 
 export interface GlobalCache {
@@ -25,7 +30,7 @@ export interface GlobalCache {
   workspaces: Record<string, WorkspaceCache>;
 }
 
-export const CACHE_VERSION = 1;
+export const CACHE_VERSION = 2;
 
 export function emptyWorkspaceCache(): WorkspaceCache {
   return {

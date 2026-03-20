@@ -68,18 +68,19 @@ export function syncPipelinesFromData(workspaces: any[], cache: GlobalCache): { 
     const cached = getWorkspace(cache, ws.id);
     if (!Array.isArray(ws.pipelines)) continue;
     for (const pipeline of ws.pipelines) {
-      if (pipeline.id && pipeline.name) {
-        cached.pipelines[pipeline.id] = pipeline.name;
-        pipelines++;
-      }
+      if (!pipeline.id || !pipeline.name) continue;
+      const pipelineDef = { name: pipeline.name, stages: {} as Record<string, string> };
+      pipelines++;
       if (Array.isArray(pipeline.pipelineStages)) {
         for (const stage of pipeline.pipelineStages) {
           if (stage.id && stage.name) {
+            pipelineDef.stages[stage.id] = stage.name;
             cached.stages[stage.id] = stage.name;
             stages++;
           }
         }
       }
+      cached.pipelines[pipeline.id] = pipelineDef;
     }
   }
   return { pipelines, stages };
@@ -136,15 +137,6 @@ export function captureContext(obj: any, cache: GlobalCache, currentWsId?: strin
   }
 
   const wsId = obj.workspaceId || currentWsId;
-  if (wsId && obj.id && obj.name) {
-    const ws = getWorkspace(cache, wsId);
-
-    // Identify entity type from response hints
-    if (obj.email && !obj.domain) {
-      // Has email but no domain → likely a user, not a company
-      ws.users[obj.id] = obj.name;
-    }
-  }
 
   // Capture owners/assignees that are expanded objects
   if (wsId) {
@@ -177,7 +169,9 @@ export function captureContext(obj: any, cache: GlobalCache, currentWsId?: strin
       ws.stages[obj.stageObject.id] = obj.stageObject.name;
     }
     if (obj.pipeline && obj.pipeline.id && obj.pipeline.name) {
-      ws.pipelines[obj.pipeline.id] = obj.pipeline.name;
+      if (!ws.pipelines[obj.pipeline.id]) {
+        ws.pipelines[obj.pipeline.id] = { name: obj.pipeline.name, stages: {} };
+      }
     }
   }
 

@@ -135,7 +135,7 @@ describe("zero-cli config commands", () => {
           users: { "user-1": "Alice" },
           lists: { "list-1": "VIP" },
           stages: { "stage-1": "Negotiation" },
-          pipelines: { "pipe-1": "Sales" },
+          pipelines: { "pipe-1": { name: "Sales", stages: { "stage-1": "Negotiation" } } },
         },
       },
     };
@@ -147,7 +147,7 @@ describe("zero-cli config commands", () => {
     expect(parsed["ws-1"].users["user-1"]).toBe("Alice");
     expect(parsed["ws-1"].lists["list-1"]).toBe("VIP");
     expect(parsed["ws-1"].stages["stage-1"]).toBe("Negotiation");
-    expect(parsed["ws-1"].pipelines["pipe-1"]).toBe("Sales");
+    expect(parsed["ws-1"].pipelines["pipe-1"].name).toBe("Sales");
   });
 
   test("config show --columns filters to columns only", () => {

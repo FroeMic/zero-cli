@@ -167,8 +167,16 @@ describe("syncPipelinesFromData", () => {
     ];
     const counts = syncPipelinesFromData(data, cache);
     expect(counts).toEqual({ pipelines: 2, stages: 4 });
-    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("Founder Pipeline");
-    expect(cache.workspaces["ws-1"].pipelines["pipe-2"]).toBe("Sales Pipeline");
+    // Pipelines store name + nested stages
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toEqual({
+      name: "Founder Pipeline",
+      stages: { "stage-1": "Lead", "stage-2": "Meeting", "stage-3": "Closed Won" },
+    });
+    expect(cache.workspaces["ws-1"].pipelines["pipe-2"]).toEqual({
+      name: "Sales Pipeline",
+      stages: { "stage-4": "Prospecting" },
+    });
+    // Flat stage lookup is also populated
     expect(cache.workspaces["ws-1"].stages["stage-1"]).toBe("Lead");
     expect(cache.workspaces["ws-1"].stages["stage-3"]).toBe("Closed Won");
   });
@@ -183,7 +191,10 @@ describe("syncPipelinesFromData", () => {
     ];
     const counts = syncPipelinesFromData(data, cache);
     expect(counts).toEqual({ pipelines: 1, stages: 0 });
-    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("Empty Pipeline");
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toEqual({
+      name: "Empty Pipeline",
+      stages: {},
+    });
   });
 
   test("skips workspaces without id or pipelines", () => {
@@ -209,8 +220,8 @@ describe("syncPipelinesFromData", () => {
       },
     ];
     syncPipelinesFromData(data, cache);
-    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("P1");
-    expect(cache.workspaces["ws-2"].pipelines["pipe-2"]).toBe("P2");
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"].name).toBe("P1");
+    expect(cache.workspaces["ws-2"].pipelines["pipe-2"].name).toBe("P2");
     expect(cache.workspaces["ws-1"].stages["s-2"]).toBeUndefined();
   });
 });
@@ -361,7 +372,10 @@ describe("captureContext", () => {
     };
     captureContext(response, cache);
     expect(cache.workspaces["ws-1"].stages["stage-1"]).toBe("Negotiation");
-    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toBe("Sales Pipeline");
+    expect(cache.workspaces["ws-1"].pipelines["pipe-1"]).toEqual({
+      name: "Sales Pipeline",
+      stages: {},
+    });
   });
 
   test("handles null/undefined gracefully", () => {
@@ -371,19 +385,27 @@ describe("captureContext", () => {
     expect(Object.keys(cache.workspaces)).toHaveLength(0);
   });
 
-  test("does not misidentify companies as users (companies have domain)", () => {
+  test("does not misidentify contacts or companies as users", () => {
     const cache = emptyGlobalCache();
     const response = {
-      data: [{
-        id: "company-1",
-        name: "Acme Corp",
-        workspaceId: "ws-1",
-        email: "info@acme.com",
-        domain: "acme.com",
-      }],
+      data: [
+        {
+          id: "contact-1",
+          name: "Jane Doe",
+          workspaceId: "ws-1",
+          email: "jane@example.com",
+        },
+        {
+          id: "company-1",
+          name: "Acme Corp",
+          workspaceId: "ws-1",
+          email: "info@acme.com",
+          domain: "acme.com",
+        },
+      ],
     };
     captureContext(response, cache);
-    // Should NOT be captured as a user since it has a domain field
+    expect(cache.workspaces["ws-1"].users["contact-1"]).toBeUndefined();
     expect(cache.workspaces["ws-1"].users["company-1"]).toBeUndefined();
   });
 });
