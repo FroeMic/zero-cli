@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { getRawCliPath, execRawJson } from "./raw";
 import { loadCache, saveCache, getWorkspace } from "./cache";
-import { extractDataArray, syncColumnsFromData, syncWorkspacesFromData, syncPipelinesFromData, syncUsersFromData, syncListsFromData, captureContext } from "./sync";
+import { extractDataArray, syncColumnsFromData, syncWorkspacesFromData, syncPipelinesFromData, syncUsersFromData, syncListsFromData } from "./sync";
 import { enrichObject } from "./enrich";
 import { unwrapResponse, formatJson } from "./output";
 import type { GlobalCache } from "./types";
@@ -39,26 +39,6 @@ function runSync(): void {
     console.error(`  Columns: ${count}`);
   } else {
     console.error(`  Warning: failed to fetch columns: ${colResult.error}`);
-  }
-
-  // 3. Bootstrap context from contacts (owners, lists)
-  const ctxResult = execRawJson(RAW_CLI, [
-    "contacts", "list",
-    "--fields", "workspaceId,owners.id,owners.name,lists.id,lists.name",
-    "--limit", "50",
-  ]);
-  if (ctxResult.success) {
-    captureContext(ctxResult.data, cache);
-  }
-
-  // 4. Bootstrap context from deals (stages, pipelines)
-  const dealResult = execRawJson(RAW_CLI, [
-    "deals", "list",
-    "--fields", "workspaceId,stage,pipeline.id,pipeline.name,stageObject.id,stageObject.name",
-    "--limit", "50",
-  ]);
-  if (dealResult.success) {
-    captureContext(dealResult.data, cache);
   }
 
   saveCache(cache);
@@ -176,10 +156,6 @@ export async function main(): Promise<void> {
     try {
       const raw = JSON.parse(stdoutStr);
       const cache = loadCache();
-
-      // Capture any new context from the response
-      captureContext(raw, cache);
-      saveCache(cache);
 
       // Unwrap, enrich, format
       const unwrapped = unwrapResponse(raw);
